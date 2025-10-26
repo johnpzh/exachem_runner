@@ -1,0 +1,3 @@
+[submodule "submodules/exachem"]
+	path = submodules/exachem
+	url = https://github.com/ExaChem/exachem.git

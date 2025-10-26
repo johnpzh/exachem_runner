@@ -1,0 +1,10 @@
+# Output
+output*
+
+# IDE
+.vscode/
+.idea/
+.mypy_cache/
+
+# OS
+.DS_Store
