@@ -15,6 +15,12 @@ cd pg00_submit_job
 bash sbatch/run00.run_exachem_remote.sh
 ```
 
+If you want to run Nextflow script, do
+```bash
+cd pg00_submit_job
+bash sbatch/run01.run_nextflow_exachem_remote.sh
+```
+
 ## Appendix: How to Build ExaChem
 Change current directory to the target directory, then run the following script
 
