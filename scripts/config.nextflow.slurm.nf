@@ -3,18 +3,18 @@ process run_mpirun {
     queue 'slurm'
     time '1h'
     clusterOptions '\
-        --job-name="1kgenome" \
-        --account=datamesh \
+        --job-name="exachem" \
+        --account=BR26_PENG599 \
         -N 1 \
-        --output=R.%x.%j.out \
-        --error=R.%x.%j.err \
+        --output=output.%x.%j.out \
+        --error=output.%x.%j.err \
         --mail-type=FAIL \
         --mail-user=zhen.peng@pnnl.gov \
         --exclusive'
     beforeScript '\
         source /etc/profile.d/modules.sh; \
         module purge; \
-        module load gcc/11.2.0 binutils/2.35 cmake/3.29.0 java/23.0.1; \
+        module load gcc/14.2.0 java/24.0.2; \
         ulimit -s unlimited;'
 
     script:
