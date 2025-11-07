@@ -175,23 +175,40 @@ process fetch_remote_results {
     """
 }
 
+// ---------
+// Workflow
+// ---------
 workflow {
+    /* -------------------------------------- */
+    /* Step 1: get remote workspace directory */
+    /* -------------------------------------- */
     create_remote_workspace()
     remote_workspace_dir = create_remote_workspace.out.remote_workspace_dir
     // remote_workspace_dir.view { item -> "Created remote workspace directory ${item} ." }
 
+    /* ------------------------------------------------------*/
+    /* Step 2: copy input file and sbatch template to remote */
+    /* ------------------------------------------------------*/
     copy_to_remote(remote_workspace_dir)
 
+    /* -------------------------*/
+    /* Step 3: submit Slurm job */
+    /* -------------------------*/
     submit_slurm_job(remote_workspace_dir, copy_to_remote.out.is_successful)
     job_id = submit_slurm_job.out.job_id
 
+    /* ------------------------------------ */
+    /* Step 3: monitor the slurm job status */
+    /* ------------------------------------ */
     monitor_slurm_job(job_id)
 
+    /* --------------------- */
+    /* Step 4: fetch results */
+    /* --------------------- */
     // Read the basisset value
     basisset_name = channel.fromPath(params.input)
                            .map { f -> get_basisset_name(f) }
                            .first()
-
     fetch_remote_results(remote_workspace_dir,
                          job_id,
                          basisset_name,
