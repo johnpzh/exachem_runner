@@ -46,8 +46,8 @@ process submit_slurm_mpirun {
     mpirun -n ${params.np} "${params.tamm_install_path}/bin/ExaChem" "${params.input}" | tee output.\${SLURM_JOB_NAME}.\${SLURM_JOB_ID}.pure_out.log
 
     # Copy printout
-    cp output.*.out.log output.*.err.log "${launchDir}/"
-    echo "Copied output.*.out.log output.*.err.log to ${launchDir}/ ."
+    cp output.*.out.log output.*.err.log output.*.pure_out.log "${launchDir}/"
+    echo "Copied output.*.out.log output.*.err.log output.*.pure_out.log to ${launchDir}/ ."
 
     # Get output directory name
     input_basename=\$(basename "${params.input}")

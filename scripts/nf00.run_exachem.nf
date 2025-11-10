@@ -171,7 +171,7 @@ process fetch_remote_results {
     set -x
     cp -r "\${dir_name}" "${launchDir}/"
     set +x
-    echo "Fetched remote json output directory \${output_json_dir} to local directory ./\${dir_name}/ ."
+    echo "Copied local results \${dir_name}/ to ${launchDir}/ ."
     """
 }
 

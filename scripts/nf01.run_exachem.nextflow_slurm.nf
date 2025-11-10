@@ -6,8 +6,7 @@ params.account = "BR26_PENG599"
 params.nodes = 1
 params.np = 2
 params.remote_host = "deception"
-params.poll_interval = 10
-params.nextflow_slurm_template_tile = "/path/to/scripts/template00.nextflow.slurm.run_mpirun.nf"
+params.nextflow_slurm_template_file = "/path/to/scripts/template00.nextflow.slurm.run_mpirun.nf"
 
 // ----------
 // Utilities
@@ -33,7 +32,7 @@ process create_remote_workspace {
 
     # Get remote workspace directory name
     remote_pwd=\$(ssh -o StrictHostKeyChecking=no ${params.remote_host} 'pwd')
-    dir_name="output.workspace.\$(date +%FT%T)"
+    dir_name="output.workspace.remote.\$(date +%FT%T)"
     remote_dir="\${remote_pwd}/\${dir_name}"
 
     # Create the remote directory
@@ -80,14 +79,15 @@ process submit_slurm_job {
 
     input_basename=\$(basename "${params.input}")
     template_basename=\$(basename "${params.nextflow_slurm_template_file}")
-    cd ${remote_workspace_dir} && \
-    nextflow run \${template_basename} \
-        -work-dir "output.workspace.nf.$(date +%FT%T)" \
-        -ansi-log false \
-        --input "${remote_workspace_dir}/\${input_basename}" \
-        --np ${params.np} \
-        --tamm_install_path "/qfs/people/peng599/local/install/tamm" \
-        --account BR26_PENG599
+    submit_cmd="cd ${remote_workspace_dir} && \
+                nextflow run \${template_basename} \
+                    -work-dir \"output.workspace.nf.submit_slurm.\$(date +%FT%T)\" \
+                    -ansi-log false \
+                    --input \"${remote_workspace_dir}/\${input_basename}\" \
+                    --np ${params.np} \
+                    --tamm_install_path \"/qfs/people/peng599/local/install/tamm\" \
+                    --account BR26_PENG599"
+    ssh -o StrictHostKeyChecking=no "${params.remote_host}" "\${submit_cmd}"
 
     """
 }
@@ -111,15 +111,16 @@ process fetch_remote_results {
     set -x
     scp -o StrictHostKeyChecking=no ${params.remote_host}:"${remote_workspace_dir}/output.*.err.log" "./\${dir_name}"
     scp -o StrictHostKeyChecking=no ${params.remote_host}:"${remote_workspace_dir}/output.*.out.log" "./\${dir_name}"
+    scp -o StrictHostKeyChecking=no ${params.remote_host}:"${remote_workspace_dir}/output.*.pure_out.log" "./\${dir_name}"
     scp -r -o StrictHostKeyChecking=no ${params.remote_host}:"${remote_workspace_dir}/json" "./\${dir_name}/"
     set +x
 
-    echo "Fectched remote printout files output.*.err.log, output.*.out.log, json/ to local directory ./\${dir_name}/ ."
+    echo "Fectched remote printout files output.*.err.log, output.*.out.log, output.*.pure_out.log, and json/ to local directory ./\${dir_name}/ ."
 
     set -x
     cp -r "\${dir_name}" "${launchDir}/"
     set +x
-    echo "Fetched remote json output directory \${output_json_dir} to local directory ./\${dir_name}/ ."
+    echo "Copied local results \${dir_name}/ to ${launchDir}/ ."
     """
 }
 
@@ -158,5 +159,5 @@ workflow {
     //                        .map { f -> get_basisset_name(f) }
     //                        .first()
     fetch_remote_results(remote_workspace_dir,
-                         monitor_slurm_job.out.is_successful)
+                         submit_slurm_job.out.is_successful)
 }
