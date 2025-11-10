@@ -3,7 +3,6 @@
 // -----------
 params.input = "/path/to/submodules/exachem/inputs/ozone.json"
 params.account = "BR26_PENG599"
-params.nodes = 1
 params.np = 2
 params.remote_host = "deception"
 params.nextflow_slurm_template_file = "/path/to/scripts/template00.nextflow.slurm.run_mpirun.nf"

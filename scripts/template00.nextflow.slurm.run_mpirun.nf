@@ -42,9 +42,15 @@ process submit_slurm_mpirun {
 
     script:
     """
+    ###############
+    # Run the task
+    ###############
     export TAMM_INSTALL_PATH=${params.tamm_install_path}
     mpirun -n ${params.np} "${params.tamm_install_path}/bin/ExaChem" "${params.input}" | tee output.\${SLURM_JOB_NAME}.\${SLURM_JOB_ID}.pure_out.log
 
+    ################################
+    # Prepare output after the task
+    ################################
     # Copy printout
     cp output.*.out.log output.*.err.log output.*.pure_out.log "${launchDir}/"
     echo "Copied output.*.out.log output.*.err.log output.*.pure_out.log to ${launchDir}/ ."
@@ -93,7 +99,7 @@ process sanity_check {
 }
 
 workflow {
-    sanity_check()
+    // sanity_check()
 
     // Read the basisset value
     basisset_name = channel.fromPath(params.input)

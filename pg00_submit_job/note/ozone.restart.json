@@ -1,0 +1,45 @@
+{
+  "geometry": {
+    "coordinates": [
+      "O   0.0000000000        0.0000000000        0.0000000000",
+      "O   0.0000000000       -2.0473224350       -1.2595211660",
+      "O   0.0000000000        2.0473224350       -1.2595211660"
+    ],
+    "units": "bohr"
+  },
+  "basis": {
+    "basisset": "sto-3g"
+  },
+  "common": {
+    "maxiter": 100,
+    "debug": false,
+    "file_prefix": "ozone",
+    "output_dir": "",
+    "comments": {
+      "comment1": "example comment"
+    }
+  },
+  "SCF": {
+    "restart": true
+  },
+  "CD": {
+    "diagtol": 1e-06
+  },
+  "CC": {
+    "threshold": 1e-8,
+    "debug": false,
+    "EOMCCSD": {
+      "eom_nroots": 2,
+      "eom_type": "right",
+      "eom_threshold": 1e-6,
+      "eom_microiter": 50
+    }
+  },
+  "TASK": {
+    "scf": false,
+    "mp2": false,
+    "cd_2e": false,
+    "ccsd": true,
+    "ccsd_t": false
+  }
+}
