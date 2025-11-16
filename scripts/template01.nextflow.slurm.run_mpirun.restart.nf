@@ -13,6 +13,12 @@ def get_basisset_name(json_file) {
         ?.basisset
 }
 
+def get_file_prefix(json_file) {
+    new groovy.json.JsonSlurper().parseText(json_file.text)
+        ?.common
+        ?.file_prefix
+}
+
 process submit_slurm_mpirun {
     executor 'slurm'
     queue 'slurm'
@@ -36,6 +42,7 @@ process submit_slurm_mpirun {
 
     input:
     val basisset
+    val file_prefix
 
     output:
     val true, emit: is_successful
@@ -45,6 +52,12 @@ process submit_slurm_mpirun {
     ###############
     # Run the task
     ###############
+    # Get output directory name
+    output_dir_remote="${file_prefix}.${basisset}_files"
+
+    cp -rf "${launchDir}/\${output_dir_remote}" ./
+    echo "Copied ${launchDir}/\${output_dir_remote} to current working directory ./ ."
+
     export TAMM_INSTALL_PATH=${params.tamm_install_path}
     mpirun -n ${params.np} "${params.tamm_install_path}/bin/ExaChem" "${params.input}" | tee output.\${SLURM_JOB_NAME}.\${SLURM_JOB_ID}.pure_out.log
 
@@ -52,14 +65,13 @@ process submit_slurm_mpirun {
     # Prepare output after the task
     ################################
     # Copy printout
-    rm "${launchDir}"/output.*.out.log "${launchDir}"/output.*.err.log "${launchDir}"/output.*.pure_out.log || true
     cp output.*.out.log output.*.err.log output.*.pure_out.log "${launchDir}/"
     echo "Copied output.*.out.log output.*.err.log output.*.pure_out.log to ${launchDir}/ ."
 
-    # Get output directory name
-    input_basename=\$(basename "${params.input}")
-    input_name="\${input_basename%.*}"
-    output_dir_remote="\${input_name}.${basisset}_files"
+    rm -rf "${launchDir}/\${output_dir_remote}" || true
+    cp -r "\${output_dir_remote}" "${launchDir}/"
+
+    echo "Copied \${output_dir_remote} to ${launchDir}/ ."
 
     restricted=""
     if [ -d "\${output_dir_remote}/restricted" ]; then
@@ -77,7 +89,6 @@ process submit_slurm_mpirun {
     rm -rf "${launchDir}/json" || true
     cp -r "\${output_json_dir}" "${launchDir}/"
     set +x
-
     echo "Copied \${output_json_dir} to ${launchDir}/ ."
     """
 }
@@ -107,6 +118,9 @@ workflow {
     basisset_name = channel.fromPath(params.input)
                            .map { f -> get_basisset_name(f) }
                            .first()
+    file_prefix = channel.fromPath(params.input)
+                         .map { f -> get_file_prefix(f) }
+                         .first()
     // Submit the slurm job
-    submit_slurm_mpirun(basisset_name)
+    submit_slurm_mpirun(basisset_name, file_prefix)
 }

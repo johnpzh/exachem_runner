@@ -36,7 +36,7 @@ process create_remote_workspace {
     remote_dir="\${remote_pwd}/${params.remote_workspace_dir_basename}"
 
     # Create the remote directory
-    ssh -o StrictHostKeyChecking=no ${params.remote_host} "mkdir -p \${remote_dir}"
+    ssh -o StrictHostKeyChecking=no ${params.remote_host} "rm -rf \${remote_dir} || true; mkdir -p \${remote_dir}"
 
     # Set the output
     remote_workspace_dir="\${remote_dir}"

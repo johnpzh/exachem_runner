@@ -13,6 +13,12 @@ def get_basisset_name(json_file) {
         ?.basisset
 }
 
+def get_file_prefix(json_file) {
+    new groovy.json.JsonSlurper().parseText(json_file.text)
+        ?.common
+        ?.file_prefix
+}
+
 process submit_slurm_mpirun {
     executor 'slurm'
     queue 'slurm'
@@ -52,7 +58,6 @@ process submit_slurm_mpirun {
     # Prepare output after the task
     ################################
     # Copy printout
-    rm "${launchDir}"/output.*.out.log "${launchDir}"/output.*.err.log "${launchDir}"/output.*.pure_out.log || true
     cp output.*.out.log output.*.err.log output.*.pure_out.log "${launchDir}/"
     echo "Copied output.*.out.log output.*.err.log output.*.pure_out.log to ${launchDir}/ ."
 
@@ -60,6 +65,10 @@ process submit_slurm_mpirun {
     input_basename=\$(basename "${params.input}")
     input_name="\${input_basename%.*}"
     output_dir_remote="\${input_name}.${basisset}_files"
+
+    cp -r "\${output_dir_remote}" "${launchDir}/"
+
+    echo "Copied \${output_dir_remote} to ${launchDir}/ ."
 
     restricted=""
     if [ -d "\${output_dir_remote}/restricted" ]; then
@@ -77,7 +86,6 @@ process submit_slurm_mpirun {
     rm -rf "${launchDir}/json" || true
     cp -r "\${output_json_dir}" "${launchDir}/"
     set +x
-
     echo "Copied \${output_json_dir} to ${launchDir}/ ."
     """
 }

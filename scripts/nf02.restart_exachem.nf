@@ -28,7 +28,7 @@ process upload_restart_input {
 
     script:
     """
-    file_string="${params.input}"
+    file_string="${params.input} ${params.nextflow_slurm_template_file}"
     set -x
     scp -r -o StrictHostKeyChecking=no \${file_string} ${params.remote_host}:"${remote_workspace_dir}/"
     set +x
@@ -106,4 +106,8 @@ workflow {
     upload_restart_input(remote_workspace_dir)
 
     submit_slurm_job(remote_workspace_dir, upload_restart_input.out.is_successful)
+
+    if (params.do_fetch_results) {
+        fetch_remote_results(remote_workspace_dir, submit_slurm_job.out.is_successful)
+    }
 }
