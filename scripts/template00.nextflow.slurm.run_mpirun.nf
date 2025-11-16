@@ -52,6 +52,7 @@ process submit_slurm_mpirun {
     # Prepare output after the task
     ################################
     # Copy printout
+    rm "${launchDir}/output.*.out.log" "${launchDir}/output.*.err.log" "${launchDir}/output.*.pure_out.log" || true
     cp output.*.out.log output.*.err.log output.*.pure_out.log "${launchDir}/"
     echo "Copied output.*.out.log output.*.err.log output.*.pure_out.log to ${launchDir}/ ."
 
@@ -73,6 +74,7 @@ process submit_slurm_mpirun {
     # Copy json output directory
     output_json_dir="\${output_dir_remote}/\${restricted}/json"
     set -x
+    rm -rf "${launchDir}/json" || true
     cp -r "\${output_json_dir}" "${launchDir}/"
     set +x
 

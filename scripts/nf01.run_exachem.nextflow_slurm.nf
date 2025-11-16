@@ -6,6 +6,8 @@ params.account = "BR26_PENG599"
 params.np = 2
 params.remote_host = "deception"
 params.nextflow_slurm_template_file = "/path/to/scripts/template00.nextflow.slurm.run_mpirun.nf"
+params.remote_workspace_dir_basename = ""
+params.do_fetch_results = true
 
 // ----------
 // Utilities
@@ -31,8 +33,7 @@ process create_remote_workspace {
 
     # Get remote workspace directory name
     remote_pwd=\$(ssh -o StrictHostKeyChecking=no ${params.remote_host} 'pwd')
-    dir_name="output.workspace.remote.\$(date +%FT%T)"
-    remote_dir="\${remote_pwd}/\${dir_name}"
+    remote_dir="\${remote_pwd}/${params.remote_workspace_dir_basename}"
 
     # Create the remote directory
     ssh -o StrictHostKeyChecking=no ${params.remote_host} "mkdir -p \${remote_dir}"
@@ -43,6 +44,7 @@ process create_remote_workspace {
     echo "Created remote workspace directory \${remote_workspace_dir} ."
     """
 }
+
 
 process copy_to_remote {
     input:
@@ -60,7 +62,7 @@ process copy_to_remote {
     scp -r -o StrictHostKeyChecking=no \${file_string} ${params.remote_host}:"${remote_workspace_dir}/"
     set +x
 
-    echo 'Copied \${file_string} to remote ${params.remote_host}:"${remote_workspace_dir}"'
+    echo "Copied \${file_string} to remote ${params.remote_host}:\"${remote_workspace_dir}\""
     """
 }
 
@@ -157,6 +159,8 @@ workflow {
     // basisset_name = channel.fromPath(params.input)
     //                        .map { f -> get_basisset_name(f) }
     //                        .first()
-    fetch_remote_results(remote_workspace_dir,
-                         submit_slurm_job.out.is_successful)
+    if (params.do_fetch_results) {
+        fetch_remote_results(remote_workspace_dir,
+                             submit_slurm_job.out.is_successful)
+    }
 }
