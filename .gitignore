@@ -1,0 +1,14 @@
+# Output
+output*
+
+# IDE
+.vscode/
+.idea/
+.mypy_cache/
+
+# Nextflow
+.nextflow.log*
+.nextflow/
+
+# OS
+.DS_Store
