@@ -1,11 +1,7 @@
-params.remote_workspace_dir_basename = ""
-params.input = ""
-params.account = ""
-params.np = 2
-params.remote_host = "deception"
-params.nextflow_slurm_template_file = ""
-params.do_fetch_results = true
 
+// ----------
+// Processes
+// ----------
 
 process get_remote_workspace_dir {
     output:
@@ -28,7 +24,7 @@ process upload_restart_input {
 
     script:
     """
-    file_string="${params.input} ${params.nextflow_slurm_template_file}"
+    file_string="${params.restart_input} ${params.nextflow_restart_template_file}"
     set -x
     scp -r -o StrictHostKeyChecking=no \${file_string} ${params.remote_host}:"${remote_workspace_dir}/"
     set +x
@@ -47,16 +43,19 @@ process submit_slurm_job {
 
     script:
     """
-    input_basename=\$(basename "${params.input}")
-    template_basename=\$(basename "${params.nextflow_slurm_template_file}")
+    input_basename=\$(basename "${params.restart_input}")
+    template_basename=\$(basename "${params.nextflow_restart_template_file}")
     submit_cmd="cd ${remote_workspace_dir} && \
                 nextflow run \${template_basename} \
                     -work-dir \"output.workspace.nf.submit_slurm.\$(date +%FT%T)\" \
                     -ansi-log false \
                     --input \"${remote_workspace_dir}/\${input_basename}\" \
+                    --nodes ${params.nodes} \
                     --np ${params.np} \
-                    --tamm_install_path \"/qfs/people/peng599/local/install/tamm\" \
-                    --account BR26_PENG599"
+                    --tamm_install_path \"${params.remote_tamm_install_path}\" \
+                    --account \"${params.account}\" \
+                    --slurm_partition \"${params.slurm_partition}\" \
+                    --slurm_job_time_limit \"${params.slurm_job_time_limit}\""
     ssh -o StrictHostKeyChecking=no "${params.remote_host}" "\${submit_cmd}"
 
     """
@@ -98,15 +97,29 @@ process fetch_remote_results {
 
 }
 
-
+// ---------
+// Workflow
+// ---------
 workflow {
+    /* -------------------------------------- */
+    /* Step 1: get remote workspace directory */
+    /* -------------------------------------- */
     get_remote_workspace_dir()
     remote_workspace_dir = get_remote_workspace_dir.out.remote_workspace_dir
 
+    /* ------------------------------------------------------*/
+    /* Step 2: upload restart input file to remote workspace */
+    /* ------------------------------------------------------*/
     upload_restart_input(remote_workspace_dir)
 
+    /* -------------------------*/
+    /* Step 3: submit Slurm job */
+    /* -------------------------*/
     submit_slurm_job(remote_workspace_dir, upload_restart_input.out.is_successful)
 
+    /* --------------------- */
+    /* Step 4: fetch results */
+    /* --------------------- */
     if (params.do_fetch_results) {
         fetch_remote_results(remote_workspace_dir, submit_slurm_job.out.is_successful)
     }

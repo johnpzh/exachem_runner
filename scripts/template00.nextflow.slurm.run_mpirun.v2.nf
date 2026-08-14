@@ -1,7 +1,3 @@
-params.input = ""
-params.np = 2
-params.tamm_install_path = ""
-params.account = ""
 
 // ----------
 // Utilities
@@ -21,12 +17,12 @@ def get_file_prefix(json_file) {
 
 process submit_slurm_mpirun {
     executor 'slurm'
-    queue 'slurm'
-    time '1h'
+    queue params.slurm_partition
+    time params.slurm_job_time_limit
     clusterOptions "\
         --job-name='exachem' \
         --account=${params.account} \
-        -N 1 \
+        -N ${params.nodes} \
         --output=output.%x.%j.out.log \
         --error=output.%x.%j.err.log \
         --mail-type=FAIL \
