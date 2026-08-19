@@ -78,6 +78,7 @@ process submit_slurm_job {
                     --np ${params.np} \
                     --tamm_install_path \"${params.remote_tamm_install_path}\" \
                     --account \"${params.account}\" \
+                    --mail_user \"${params.mail_user}\" \
                     --slurm_partition \"${params.slurm_partition}\" \
                     --slurm_job_time_limit \"${params.slurm_job_time_limit}\""
     ssh -o StrictHostKeyChecking=no "${params.remote_host}" "\${submit_cmd}"

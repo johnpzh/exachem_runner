@@ -26,7 +26,7 @@ process submit_slurm_mpirun {
         --output=output.%x.%j.out.log \
         --error=output.%x.%j.err.log \
         --mail-type=FAIL \
-        --mail-user=zhen.peng@pnnl.gov \
+        --mail-user=${params.mail_user} \
         --exclusive"
     beforeScript '\
         source /etc/profile.d/modules.sh; \

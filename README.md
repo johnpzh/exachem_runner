@@ -19,6 +19,7 @@ First, please modify the parameters in the config file `pg00_submit_job/nextflow
 | `input` | ExaChem input JSON for the first run |
 | `restart_input` | ExaChem input JSON for the restart run, needs `SCF.restart` set to `true` |
 | `account` | Slurm account to charge the job to |
+| `mail_user` | Email address for Slurm job failure notifications (Slurm `--mail-user`) |
 | `slurm_partition` | Slurm partition to submit to (Slurm `-p`) |
 | `slurm_job_time_limit` | Slurm job time limit, e.g. `1h`, `2d`, or `04:44:44` |
 | `nodes` | Number of nodes to reserve (Slurm `-N`) |
@@ -30,7 +31,7 @@ First, please modify the parameters in the config file `pg00_submit_job/nextflow
 | `remote_tamm_install_path` | TAMM installation path on the remote server |
 | `remote_workspace_dir_basename` | Remote working directory name, set automatically by the scripts in `sbatch/` |
 
-The ones that usually need changing are `account`, `input`, `slurm_partition`, `remote_host`, and `remote_tamm_install_path`.
+The ones that usually need changing are `account`, `mail_user`, `input`, `slurm_partition`, `remote_host`, and `remote_tamm_install_path`.
 
 Second, in the repo root, run
 
