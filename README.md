@@ -21,7 +21,9 @@ First, please modify the parameters in the config file `pg00_submit_job/nextflow
 | `restart_input`                  | ExaChem input JSON for the restart run, needs `SCF.restart` set to `true`    |
 | `account`                        | Slurm account to charge the job to                                           |
 | `mail_user`                      | Email address for Slurm job failure notifications (Slurm `--mail-user`)      |
-| `slurm_partition`                | Slurm partition to submit to (Slurm `-p`)                                    |
+| `slurm_partition`                | Slurm partition to submit to (Slurm `-p`); `""` omits the flag               |
+| `slurm_qos`                      | Slurm QOS (Slurm `--qos`), e.g. `regular` on Perlmutter; `""` omits the flag |
+| `slurm_constraint`               | Slurm constraint (Slurm `--constraint`), e.g. `cpu` on Perlmutter; `""` omits the flag |
 | `slurm_job_time_limit`           | Slurm job time limit, e.g. `1h`, `2d`, or `04:44:44`                         |
 | `nodes`                          | Number of nodes to reserve (Slurm `-N`)                                      |
 | `np`                             | Number of MPI ranks (`mpirun -n`)                                            |
@@ -68,7 +70,16 @@ Therefore everything cluster-specific sits in two places: the config file `pg00_
 ### 2. Set the cluster-dependent parameters in the config
 
 These differences are already covered by parameters in `pg00_submit_job/nextflow.params.config`, so no code change is needed:
-`remote_host`, `account`, `slurm_partition`, `slurm_job_time_limit`, `nodes`, `np`, `mail_user`, and `remote_tamm_install_path`.
+`remote_host`, `account`, `slurm_partition`, `slurm_qos`, `slurm_constraint`, `slurm_job_time_limit`, `nodes`, `np`, `mail_user`, and `remote_tamm_install_path`.
+
+`slurm_partition`, `slurm_qos`, and `slurm_constraint` are each left out of the Slurm submission when set to the empty string `""`, so a cluster can use any combination of them.
+For example, NERSC Perlmutter selects resources with `--qos` and `--constraint` instead of a partition:
+
+```groovy
+slurm_partition = ""
+slurm_qos = "regular" // or "debug", "premium", ...
+slurm_constraint = "cpu" // or "gpu"
+```
 
 ### 3. Make a cluster-specific copy of the two templates
 
@@ -94,7 +105,7 @@ In the copies, adapt these parts of the `submit_slurm_mpirun` process (make the 
 | Part                          | What to adapt                                                                                                                                                                                                                                                                                           |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `beforeScript`                | Replace the `module load ...` list with the modules your cluster needs to run ExaChem — normally the same compiler, MPI, and math-library modules used to build it there. Sites initialize the module system differently, so the `source /etc/profile.d/modules.sh` line may need changing or removing. |
-| `clusterOptions`              | Keep the parameterized flags; adjust the site-specific ones. Remove `--exclusive` if the site does not allow it, and add flags the site requires, e.g. `--qos=...`, `--constraint=...`, or `--gres=gpu:...`.                                                                                            |
+| `clusterOptions`              | Keep the parameterized flags (`--qos` and `--constraint` are already covered by `slurm_qos` / `slurm_constraint`); adjust the site-specific ones. Remove `--exclusive` if the site does not allow it, and add flags the site requires, e.g. `--gres=gpu:...` or `--reservation=...`.                     |
 | The `mpirun` line in `script` | Use the MPI launcher your site recommends, e.g. `srun --mpi=pmix -n ${params.np}` instead of `mpirun -n ${params.np}`, plus any process-binding options.                                                                                                                                                |
 | `executor 'slurm'`            | Only when the cluster does not run Slurm: switch to the matching [Nextflow executor](https://www.nextflow.io/docs/latest/executor.html) (`pbspro`, `lsf`, `sge`, ...). The `queue` and `time` directives carry over, but `clusterOptions` must be rewritten in that scheduler's own flag syntax.        |
 

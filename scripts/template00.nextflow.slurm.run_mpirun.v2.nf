@@ -22,6 +22,8 @@ process submit_slurm_mpirun {
     clusterOptions "\
         --job-name='exachem' \
         --account=${params.account} \
+        ${params.slurm_qos ? "--qos=${params.slurm_qos}" : ""} \
+        ${params.slurm_constraint ? "--constraint=${params.slurm_constraint}" : ""} \
         -N ${params.nodes} \
         --output=output.%x.%j.out.log \
         --error=output.%x.%j.err.log \

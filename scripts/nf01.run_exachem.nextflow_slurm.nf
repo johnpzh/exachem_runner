@@ -69,18 +69,22 @@ process submit_slurm_job {
 
     input_basename=\$(basename "${params.input}")
     template_basename=\$(basename "${params.nextflow_slurm_template_file}")
+    # Params must use the --name=value form: with the space-separated form, an empty
+    # value (e.g. --slurm_partition "") makes Nextflow set the param to 'true' instead
     submit_cmd="cd ${remote_workspace_dir} && \
                 nextflow run \${template_basename} \
                     -work-dir \"output.workspace.nf.submit_slurm.\$(date +%FT%T)\" \
                     -ansi-log false \
-                    --input \"${remote_workspace_dir}/\${input_basename}\" \
-                    --nodes ${params.nodes} \
-                    --np ${params.np} \
-                    --tamm_install_path \"${params.remote_tamm_install_path}\" \
-                    --account \"${params.account}\" \
-                    --mail_user \"${params.mail_user}\" \
-                    --slurm_partition \"${params.slurm_partition}\" \
-                    --slurm_job_time_limit \"${params.slurm_job_time_limit}\""
+                    --input=\"${remote_workspace_dir}/\${input_basename}\" \
+                    --nodes=${params.nodes} \
+                    --np=${params.np} \
+                    --tamm_install_path=\"${params.remote_tamm_install_path}\" \
+                    --account=\"${params.account}\" \
+                    --mail_user=\"${params.mail_user}\" \
+                    --slurm_partition=\"${params.slurm_partition}\" \
+                    --slurm_qos=\"${params.slurm_qos}\" \
+                    --slurm_constraint=\"${params.slurm_constraint}\" \
+                    --slurm_job_time_limit=\"${params.slurm_job_time_limit}\""
     ssh -o StrictHostKeyChecking=no "${params.remote_host}" "\${submit_cmd}"
 
     """
