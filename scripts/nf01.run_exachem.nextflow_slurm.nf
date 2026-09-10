@@ -8,6 +8,12 @@ def get_basisset_name(json_file) {
         ?.basisset
 }
 
+// Command-line values such as `--do_fetch_results false` arrive as the String "false", which
+// Groovy treats as true; accept booleans and true/false strings alike
+def as_bool(value) {
+    return value.toString().trim().equalsIgnoreCase("true")
+}
+
 // ----------
 // Processes
 // ----------
@@ -61,7 +67,7 @@ process submit_slurm_job {
     val copy_is_done
 
     output:
-    val true, emit: is_successful
+    env "submit_rc", emit: submit_rc
 
     script:
     """
@@ -85,8 +91,10 @@ process submit_slurm_job {
                     --slurm_qos=\"${params.slurm_qos}\" \
                     --slurm_constraint=\"${params.slurm_constraint}\" \
                     --slurm_job_time_limit=\"${params.slurm_job_time_limit}\""
-    ssh -o StrictHostKeyChecking=no "${params.remote_host}" "\${submit_cmd}"
-
+    # Do not fail this process when the remote run fails: capture the exit status instead, so that
+    # the logs of a failed run are still fetched and stored in the results database
+    ssh -o StrictHostKeyChecking=no "${params.remote_host}" "\${submit_cmd}" && submit_rc=0 || submit_rc=\$?
+    echo "Remote run finished with exit status \${submit_rc}"
     """
 }
 
@@ -94,7 +102,7 @@ process submit_slurm_job {
 process fetch_remote_results {
     input:
     val remote_workspace_dir
-    val submit_slurm_is_done
+    val submit_rc
 
     output:
     val true, emit: is_successful
@@ -105,20 +113,49 @@ process fetch_remote_results {
     dir_name=\$(basename "${remote_workspace_dir}")
     mkdir -p "\${dir_name}"
 
-    # Fetch printout
+    # The logs exist for every run, finished or not, so failing to fetch them is an error
+    set -e
     set -x
     scp -o StrictHostKeyChecking=no ${params.remote_host}:"${remote_workspace_dir}/output.*.err.log" "./\${dir_name}"
     scp -o StrictHostKeyChecking=no ${params.remote_host}:"${remote_workspace_dir}/output.*.out.log" "./\${dir_name}"
     scp -o StrictHostKeyChecking=no ${params.remote_host}:"${remote_workspace_dir}/output.*.pure_out.log" "./\${dir_name}"
-    scp -r -o StrictHostKeyChecking=no ${params.remote_host}:"${remote_workspace_dir}/json" "./\${dir_name}/"
     set +x
 
-    echo "Fectched remote printout files output.*.err.log, output.*.out.log, output.*.pure_out.log, and json/ to local directory ./\${dir_name}/ ."
+    # A run that did not finish leaves no json/ directory; fetch it only when it exists
+    if ssh -o StrictHostKeyChecking=no ${params.remote_host} "test -d '${remote_workspace_dir}/json'"; then
+        scp -r -o StrictHostKeyChecking=no ${params.remote_host}:"${remote_workspace_dir}/json" "./\${dir_name}/"
+        echo "Fetched remote printout files output.*.err.log, output.*.out.log, output.*.pure_out.log, and json/ to local directory ./\${dir_name}/ ."
+    else
+        echo "Warning: no json/ directory in remote ${remote_workspace_dir} (the run did not finish); fetched the logs only."
+    fi
 
     set -x
     cp -r "\${dir_name}" "${launchDir}/"
     set +x
     echo "Copied local results \${dir_name}/ to ${launchDir}/ ."
+    """
+}
+
+process publish_results {
+    // Store the fetched run in the SQLite results database (tools/exachem_db.py), right after the
+    // fetch, because a later restart overwrites the result JSON on disk. Runs on the local machine.
+    input:
+    val remote_workspace_dir
+    val submit_rc
+    val fetch_is_done
+
+    output:
+    val true, emit: is_successful
+
+    script:
+    // A relative results_db is meant relative to the launch directory (pg00_submit_job with the
+    // sbatch/ scripts); the task itself runs in a work directory, so resolve it here
+    def db_path = file(params.results_db).toAbsolutePath()
+    """
+    #!/bin/bash
+    set -e
+    dir_name=\$(basename "${remote_workspace_dir}")
+    python3 "${params.exachem_db_tool}" --db "${db_path}" push --cluster "${params.remote_host}" --exit-code "${submit_rc}" "${launchDir}/\${dir_name}"
     """
 }
 
@@ -156,8 +193,15 @@ workflow {
     // basisset_name = channel.fromPath(params.input)
     //                        .map { f -> get_basisset_name(f) }
     //                        .first()
-    if (params.do_fetch_results) {
-        fetch_remote_results(remote_workspace_dir,
-                             submit_slurm_job.out.is_successful)
+    if (as_bool(params.do_fetch_results)) {
+        fetch_remote_results(remote_workspace_dir, submit_slurm_job.out.submit_rc)
+
+        /* --------------------------------------------- */
+        /* Step 5: store the run in the results database */
+        /* --------------------------------------------- */
+        if (as_bool(params.do_publish_results) && params.results_db) {
+            publish_results(remote_workspace_dir, submit_slurm_job.out.submit_rc,
+                            fetch_remote_results.out.is_successful)
+        }
     }
 }

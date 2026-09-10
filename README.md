@@ -6,9 +6,11 @@ Automate the [ExaChem](https://github.com/ExaChem/exachem) workflow from local m
 
 Get Nextflow from their website ([https://nextflow.io/](https://nextflow.io/)).
 
+The results database tool (`tools/exachem_db.py`) needs Python 3 with its standard library only.
+
 ## Set up Input
 
-Mannually pull out [ExaChem](https://github.com/ExaChem/exachem)'s input folder ([https://github.com/ExaChem/exachem/tree/main/inputs](https://github.com/ExaChem/exachem/tree/main/inputs)) into `submodules/exachem/inputs`.
+Manually pull out [ExaChem](https://github.com/ExaChem/exachem)'s input folder ([https://github.com/ExaChem/exachem/tree/main/inputs](https://github.com/ExaChem/exachem/tree/main/inputs)) into `submodules/exachem/inputs`.
 
 ## Run
 
@@ -32,6 +34,9 @@ First, please modify the parameters in the config file `pg00_submit_job/nextflow
 | `nextflow_restart_template_file` | Template pipeline run on the remote for the restart run                      |
 | `do_fetch_results`               | Whether to copy the results back to the local machine                        |
 | `remote_tamm_install_path`       | TAMM installation path on the remote server                                  |
+| `results_db`                     | SQLite results database each fetched run is stored in; a relative path is relative to the launch directory (`pg00_submit_job/`); `""` disables storing |
+| `do_publish_results`             | Whether to store each run in `results_db` right after fetching it            |
+| `exachem_db_tool`                | Path of the ingest tool, `tools/exachem_db.py`                               |
 | `remote_workspace_dir_basename`  | Remote working directory name, set automatically by the scripts in `sbatch/` |
 
 
@@ -47,9 +52,57 @@ bash sbatch/run02.run_nextflow_exachem_remote.v2.nextflow_slurm.sh
 The current Nextflow session's log will be saved in directory `output.workspace.nf.<date_time>`.
 The results fetched from the remote server will be saved in directory `output.workspace.remote.<date_time>`.
 
+With `do_publish_results` on (the default), every fetched run is also stored in the SQLite results database named by `results_db`, by default `pg00_submit_job/exachem_results.db`; see "Results Database" below. The script `run04.run_nextflow_exachem_remote.v4.single_database.sh` does the same as `run02` but makes the database explicit: set `EXACHEM_DB` to point all runs at one shared file (a relative path is taken relative to `pg00_submit_job/`), and it prints the stored runs at the end:
+
+```bash
+cd pg00_submit_job
+EXACHEM_DB=/path/to/shared/exachem_results.db bash sbatch/run04.run_nextflow_exachem_remote.v4.single_database.sh
+```
+
 Or you can use the script `run03.run_nextflow_exachem_remote.v3.and_restart.sh` to try run-and-restart.
 That one reuses the first run's remote directory, and submits `restart_input` instead of `input`.
 So `restart_input` should point to an input with `SCF.restart` set to `true`, and with `common.file_prefix` and `basis.basisset` matching the first run, since that is how the restart locates the previous output directory `<file_prefix>.<basisset>_files`.
+
+## Results Database (version 0)
+
+`tools/exachem_db.py` stores ExaChem results in a SQLite database, one row per result JSON file plus one per printout of a run that produced none (so failures are kept), so that runs can be queried across each other. Nothing is inferred from file names: result files are recognized by their content (a JSON object with an `output` section, anywhere below the directory), printouts by the header ExaChem writes, under any name, and a printout is matched to its result by the run date that ExaChem writes into both. It needs only Python 3 and its standard library. The design is described in `notes/database_design.md`.
+
+The pipelines call it for you: with `do_publish_results = true` in the config, nf01 and nf02 run a `publish_results` step right after the fetch, so the first run of a run-and-restart is stored before the restart overwrites its JSON on the remote. Failed runs are stored too: the templates use `pipefail` and write their logs straight into the remote workspace directory, the submit step records the remote exit status instead of stopping the workflow and hands it to the tool as `--exit-code`, and the fetch step copes with a missing `json/` directory. The commands below are for storing results by hand, for example folders fetched before this existed:
+
+```bash
+# store every fetched result directory (safe to repeat: existing jobs are skipped)
+python3 tools/exachem_db.py --db exachem_results.db push --cluster deception pg00_submit_job/output.workspace.remote.*
+
+# look at what is stored
+python3 tools/exachem_db.py --db exachem_results.db list
+python3 tools/exachem_db.py --db exachem_results.db sql "SELECT result ->> '$.molecule.name' AS molecule, result ->> '$.molecule.basis.basisset' AS basisset, result ->> '$.output.system_info.nbf' AS nbf, result ->> '$.output.CCSD.final_energy.total' AS e_ccsd, result ->> '$.output.CCSD.performance.total_time' AS t_ccsd FROM runs WHERE status = 'success'"
+python3 tools/exachem_db.py --db exachem_results.db sql "SELECT run_date, result ->> '$.output.CCSD.iter.1.performance.total_time' AS iter1_s FROM runs WHERE input ->> '$.TASK.ccsd' = 1"
+
+# share with a colleague: they push into their own file, then either side merges the other's
+python3 tools/exachem_db.py --db exachem_results.db merge colleague_results.db
+
+# copy the whole database as JSON lines (also the migration path to PostgreSQL later)
+python3 tools/exachem_db.py --db exachem_results.db export --out rows.jsonl
+python3 tools/exachem_db.py --db other.db import rows.jsonl
+```
+
+The database file comes from `--db`, else the environment variable `EXACHEM_DB` (a path or `sqlite:///path`), else `./exachem_results.db` in the current directory. Keep the file on a local disk: SQLite must not be used live on a network filesystem or in a sync folder such as OneDrive.
+
+What one row stores is only what is not inside the documents: `fingerprint` (the SHA-256 of the result JSON text, or of the printout for a run without one, which is what makes re-pushing and merging idempotent), `status`, `cluster`, `run_date`, the ExaChem and TAMM git commits, `submitted_by`, `ingested_at`, and the two documents themselves, `input` and `result`, as JSON text. Two query helpers, `nnodes` and `nproc_total`, are *generated* columns that SQLite computes from the JSON when read, so they cannot disagree with it; more can be added later with one `ALTER TABLE ... ADD COLUMN ... GENERATED ALWAYS AS (json_extract(result, '$...')) VIRTUAL`, without re-ingesting anything. Everything about the calculation itself, task, molecule, basis set, problem size, energies, timings, is a JSON path away, as in the examples above; `list` shows molecule, basis set and basis-function count by reading them from the documents. The full column list with comments is the `CREATE TABLE` at the top of `tools/exachem_db.py`. A run is additionally recognized by its cluster and run date, so a printout-only row is skipped when that run is already stored with its result, and replaced when the result is pushed later. The log files are read for the commits, the run date, the echoed input, and the status, but their contents are not stored; the fetched result directories keep them.
+
+Where the values come from: the result JSON when the job wrote one; the header ExaChem prints at the top of its printout log for the git commits, the run date, and the echoed input file; and the command line for the cluster name. The `molecule` column is ExaChem's own molecule name, which is the input file name without `.json`.
+
+Status values:
+
+| Status      | Meaning                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| `success`   | A result JSON was found and stored; the printout with the same `machine_info.date`, if any, supplies the commits |
+| `no_result` | A printout shows a normal end, but no JSON with its date exists: a later run in the same directory (a restart) overwrote it |
+| `failed`    | The logs contain an error marker (`ERROR`, `tamm_terminate`, `Segmentation fault`, ...)          |
+| `timeout`   | The logs contain Slurm's time-limit or cancellation message                                      |
+| `unknown`   | None of the above, e.g. a truncated log                                                          |
+
+The status is read off the logs; the pipeline additionally passes the remote exit status as `--exit-code`, which turns an `unknown` into `failed` when the run was reported as failed. Run the tests with `python3 tools/test_exachem_db.py`.
 
 ## Adapting to Another Cluster
 
@@ -105,8 +158,8 @@ In the copies, adapt these parts of the `submit_slurm_mpirun` process (make the 
 | Part                          | What to adapt                                                                                                                                                                                                                                                                                           |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `beforeScript`                | Replace the `module load ...` list with the modules your cluster needs to run ExaChem — normally the same compiler, MPI, and math-library modules used to build it there. Sites initialize the module system differently, so the `source /etc/profile.d/modules.sh` line may need changing or removing. |
-| `clusterOptions`              | Keep the parameterized flags (`--qos` and `--constraint` are already covered by `slurm_qos` / `slurm_constraint`); adjust the site-specific ones. Remove `--exclusive` if the site does not allow it, and add flags the site requires, e.g. `--gres=gpu:...` or `--reservation=...`.                     |
-| The `mpirun` line in `script` | Use the MPI launcher your site recommends, e.g. `srun --mpi=pmix -n ${params.np}` instead of `mpirun -n ${params.np}`, plus any process-binding options.                                                                                                                                                |
+| `clusterOptions`              | Keep the parameterized flags (`--qos` and `--constraint` are already covered by `slurm_qos` / `slurm_constraint`) and keep `--output` / `--error` pointing into `${launchDir}`, because the fetch step and the results database expect the logs there; adjust the site-specific ones. Remove `--exclusive` if the site does not allow it, and add flags the site requires, e.g. `--gres=gpu:...` or `--reservation=...`. |
+| The `mpirun` line in `script` | Use the MPI launcher your site recommends, e.g. `srun --mpi=pmix -n ${params.np}` instead of `mpirun -n ${params.np}`, plus any process-binding options. Keep the `\| tee ...pure_out.log` part and the `set -o pipefail` above it: the printout is what the results database reads, and `pipefail` is what makes a failed ExaChem visible. |
 | `executor 'slurm'`            | Only when the cluster does not run Slurm: switch to the matching [Nextflow executor](https://www.nextflow.io/docs/latest/executor.html) (`pbspro`, `lsf`, `sge`, ...). The `queue` and `time` directives carry over, but `clusterOptions` must be rewritten in that scheduler's own flag syntax.        |
 
 

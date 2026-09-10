@@ -1,10 +1,12 @@
 # Output
 output*
+notes/local.*
 
 # IDE
 .vscode/
 .idea/
 .mypy_cache/
+__pycache__/
 
 # Nextflow
 .nextflow.log*
@@ -12,3 +14,7 @@ output*
 
 # OS
 .DS_Store
+# SQLite results database (tools/exachem_db.py)
+*.db
+*.db-wal
+*.db-shm

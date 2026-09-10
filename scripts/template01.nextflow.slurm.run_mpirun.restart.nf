@@ -25,8 +25,8 @@ process submit_slurm_mpirun {
         ${params.slurm_qos ? "--qos=${params.slurm_qos}" : ""} \
         ${params.slurm_constraint ? "--constraint=${params.slurm_constraint}" : ""} \
         -N ${params.nodes} \
-        --output=output.%x.%j.out.log \
-        --error=output.%x.%j.err.log \
+        --output=${launchDir}/output.%x.%j.out.log \
+        --error=${launchDir}/output.%x.%j.err.log \
         --mail-type=FAIL \
         --mail-user=${params.mail_user} \
         --exclusive"
@@ -50,6 +50,10 @@ process submit_slurm_mpirun {
     ###############
     # Run the task
     ###############
+    # Without pipefail the exit status of the mpirun line would be tee's, and a crashed ExaChem
+    # would look like a successful job (see notes/database_design.md)
+    set -o pipefail
+
     # Get output directory name
     output_dir_remote="${file_prefix}.${basisset}_files"
 
@@ -57,14 +61,13 @@ process submit_slurm_mpirun {
     echo "Copied ${launchDir}/\${output_dir_remote} to current working directory ./ ."
 
     export TAMM_INSTALL_PATH=${params.tamm_install_path}
-    mpirun -n ${params.np} "${params.tamm_install_path}/bin/ExaChem" "${params.input}" | tee output.\${SLURM_JOB_NAME}.\${SLURM_JOB_ID}.pure_out.log
+    mpirun -n ${params.np} "${params.tamm_install_path}/bin/ExaChem" "${params.input}" | tee "${launchDir}/output.\${SLURM_JOB_NAME}.\${SLURM_JOB_ID}.pure_out.log"
 
     ################################
     # Prepare output after the task
     ################################
-    # Copy printout
-    cp output.*.out.log output.*.err.log output.*.pure_out.log "${launchDir}/"
-    echo "Copied output.*.out.log output.*.err.log output.*.pure_out.log to ${launchDir}/ ."
+    # The Slurm logs and the printout are written straight into ${launchDir} (see clusterOptions
+    # and the tee above), so they are there even when the run fails
 
     rm -rf "${launchDir}/\${output_dir_remote}" || true
     cp -r "\${output_dir_remote}" "${launchDir}/"
